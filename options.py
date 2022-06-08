@@ -27,7 +27,7 @@ class MonodepthOptions:
                                  default=os.path.join(os.path.expanduser("~"), "tmp"))
 
         # 训练选项。
-        self.parser.add_argument("--model_name",    # 保存模型的文件夹的名称，可选 mono_model， stereo_model 以及mono+stereo_model
+        self.parser.add_argument("--model_name",    # 保存模型日志的文件夹的名称，如：mono_model， stereo_model 以及mono+stereo_model
                                  type=str,
                                  help="the name of the folder to save the model in",
                                  default="mdp")

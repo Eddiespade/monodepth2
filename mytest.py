@@ -1,12 +1,6 @@
 import torch
 
-x = [torch.randn((2, 4))]
-y = [torch.randn((2, 4))]
-print(x)
-print(y)
-
-x += [y]
-print(x)
-
-x = torch.cat(x, 0)
-print(x)
+x = torch.randn((2, 4, 7, 7))
+print(x.shape)
+x = torch.nn.AvgPool2d(3, 1)(x)
+print(x.shape)

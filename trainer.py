@@ -54,17 +54,16 @@ class Trainer:
         # 仅使用 stereo训练的时候  self.use_pose_net = True
         self.use_pose_net = not (self.opt.use_stereo and self.opt.frame_ids == [0])
 
-        # 如果使用 含有stereo训练， 帧数的id追加 s
-        """ ----------------------- s 暂时不知道是干什么的 ---------------------------- """
+        # 如果使用 含有stereo训练，帧数的id追加 "s"; "s"代表双目当前帧的另一侧的图片；
         if self.opt.use_stereo:
             self.opt.frame_ids.append("s")
 
         """ 
         ---------------------------------------------- 搭建网络结构 ------------------------------------------------------
-        self.models["encoder"]： 编码层，基于resnet搭建
-        self.models["depth"]：   depth网络把得到的四种尺度图像输入encoder，得到futures再输入depth_decoder。整个网络类似于U-NET结构。
-        self.models["pose_encoder"]：
-        self.models["pose"]：
+        self.models["encoder"]：     编码层，基于resnet搭建
+        self.models["depth"]：       depth网络把得到的四种尺度图像输入encoder，得到futures再输入depth_decoder。整个网络类似于U-NET结构。
+        self.models["pose_encoder"]：相机位姿网络的编码层
+        self.models["pose"]：        相机位姿网络的解码层
         """
         # 搭建encoder模块
         self.models["encoder"] = networks.ResnetEncoder(
@@ -168,15 +167,34 @@ class Trainer:
         val_filenames = readlines(fpath.format("val"))
         img_ext = '.png' if self.opt.png else '.jpg'
 
+        # 训练样本的数量
         num_train_samples = len(train_filenames)
+        # 训练数据集生成器产生的总步数。epoch × （每个epoch训练的）
         self.num_total_steps = num_train_samples // self.opt.batch_size * self.opt.num_epochs
 
         train_dataset = self.dataset(
             self.opt.data_path, train_filenames, self.opt.height, self.opt.width,
             self.opt.frame_ids, 4, is_train=True, img_ext=img_ext)
+        # ----------------------------------------------------------------------------------------------------
+        # 语法: DataLoader(dataset, batch_size=1, shuffle=False, sampler=None, batch_sampler=None, num_workers=0,
+        #            collate_fn=None, pin_memory=False, drop_last=False, timeout=0, worker_init_fn=None, *,
+        #            prefetch_factor=2, persistent_workers=False)
+        # 主要参数：
+        #        dataset：       必须首先使用数据集构造 DataLoader 类。
+        #        Shuffle ：      是否重新整理数据。
+        #        Sampler ：      指的是可选的 torch.utils.data.Sampler 类实例。采样器定义了检索样本的策略，顺序或随机或任何其他方式。
+        #                        使用采样器时应将 Shuffle 设置为 false。
+        #        Batch_Sampler ：批处理级别。
+        #        num_workers ：  加载数据所需的子进程数。
+        #        collate_fn ：   将样本整理成批次。Torch 中可以进行自定义整理。
+        #        pin_memory：    锁页内存。pin_memory=True，意味着生成的Tensor数据最开始是属于内存中的锁页内存（显存），这样将内存的Tensor转义到GPU的显存就会更快一些
+        #                        不锁页内存在主机内存不足时，数据会存放在虚拟内存（硬盘）中。锁页内存存放的内容在任何情况下都不会与主机的虚拟内存进行交换
+        #        drop_last ：    告诉如何处理数据集长度除于batch_size余下的数据。True就抛弃，否则保留
+        # ----------------------------------------------------------------------------------------------------
         self.train_loader = DataLoader(
             train_dataset, self.opt.batch_size, True,
             num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
+        # 加载验证集
         val_dataset = self.dataset(
             self.opt.data_path, val_filenames, self.opt.height, self.opt.width,
             self.opt.frame_ids, 4, is_train=False, img_ext=img_ext)
@@ -187,13 +205,16 @@ class Trainer:
 
         self.writers = {}
         for mode in ["train", "val"]:
-            self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))
+            self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))   # 定义logs文件位置
 
+        # 使用ssim 损失衡量 重构图像和原始图像之间的差异
         if not self.opt.no_ssim:
             self.ssim = SSIM()
             self.ssim.to(self.device)
 
+        # 保存不同尺度下，将深度图像投影为点云的网络层
         self.backproject_depth = {}
+        # 保存不同尺度下，将3D点云投影到相机中的网络层
         self.project_3d = {}
         for scale in self.opt.scales:
             h = self.opt.height // (2 ** scale)
@@ -215,51 +236,59 @@ class Trainer:
         self.save_opts()
 
     def set_train(self):
-        """Convert all models to training mode
+        """
+        将所有模型转换为训练模式
         """
         for m in self.models.values():
             m.train()
 
     def set_eval(self):
-        """Convert all models to testing/evaluation mode
+        """
+        将所有模型转换为测试/验证模式
         """
         for m in self.models.values():
             m.eval()
 
     def train(self):
-        """Run the entire training pipeline
+        """
+        运行整个训练过程
         """
         self.epoch = 0
         self.step = 0
         self.start_time = time.time()
         for self.epoch in range(self.opt.num_epochs):
             self.run_epoch()
+            # 保存模型
             if (self.epoch + 1) % self.opt.save_frequency == 0:
                 self.save_model()
 
     def run_epoch(self):
-        """Run a single epoch of training and validation
         """
-        self.model_lr_scheduler.step()
+        运行每个Epoch的训练和验证
+        """
+        self.model_lr_scheduler.step()          # 更新学习率
 
         print("Training")
-        self.set_train()
+        self.set_train()                        # 将所有模型转换为训练模式
 
         for batch_idx, inputs in enumerate(self.train_loader):
 
             before_op_time = time.time()
-
+            # 通过网络传递一个小批量并生成图像和损失
             outputs, losses = self.process_batch(inputs)
 
+            # 将优化器的梯度置0
             self.model_optimizer.zero_grad()
+            # 损失反向传播
             losses["loss"].backward()
+            # 更新参数
             self.model_optimizer.step()
 
             duration = time.time() - before_op_time
 
-            # log less frequently after the first 2000 steps to save time & disk space
-            early_phase = batch_idx % self.opt.log_frequency == 0 and self.step < 2000
-            late_phase = self.step % 2000 == 0
+            # 在 2000 步后减少日志记录以节省时间和磁盘空间
+            early_phase = batch_idx % self.opt.log_frequency == 0 and self.step < 2000  # 前2000步
+            late_phase = self.step % 2000 == 0      # 2000的倍数
 
             if early_phase or late_phase:
                 self.log_time(batch_idx, duration, losses["loss"].cpu().data)
@@ -273,14 +302,16 @@ class Trainer:
             self.step += 1
 
     def process_batch(self, inputs):
-        """Pass a minibatch through the network and generate images and losses
+        """
+        通过网络传递一个小批量并生成图像和损失
+        网络的input最终是大小为42的字典，是通过CPU进行运算的。
+        这里的42 = 4(输入的4张图) × 4(4个尺度) × 2(数据增强) + 4(K矩阵4个尺度) × 2(加上逆矩阵) + 2
         """
         for key, ipt in inputs.items():
             inputs[key] = ipt.to(self.device)
 
         if self.opt.pose_model_type == "shared":
-            # If we are using a shared encoder for both depth and pose (as advocated
-            # in monodepthv1), then all images are fed separately through the depth encoder.
+            # 如果我们对深度和姿态都使用共享encoder（如 monodepthv1 中所提倡的），那么所有图像都通过深度编码器单独前向传播。
             all_color_aug = torch.cat([inputs[("color_aug", i, 0)] for i in self.opt.frame_ids])
             all_features = self.models["encoder"](all_color_aug)
             all_features = [torch.split(f, self.opt.batch_size) for f in all_features]
@@ -291,7 +322,7 @@ class Trainer:
 
             outputs = self.models["depth"](features[0])
         else:
-            # Otherwise, we only feed the image with frame_id 0 through the depth encoder
+            # 否则，只通过深度编码器输入 frame_id 为 0 的图像
             features = self.models["encoder"](inputs["color_aug", 0, 0])
             outputs = self.models["depth"](features)
 
@@ -307,14 +338,13 @@ class Trainer:
         return outputs, losses
 
     def predict_poses(self, inputs, features):
-        """Predict poses between input frames for monocular sequences.
+        """
+        预测单目序列的输入帧之间的位姿。
         """
         outputs = {}
+        # 在此设置中，我们通过姿态网络的单独前向传递计算每个源帧的姿态。
         if self.num_pose_frames == 2:
-            # In this setting, we compute the pose to each source frame via a
-            # separate forward pass through the pose network.
-
-            # select what features the pose network takes as input
+            # 选择姿态网络作为输入的特征
             if self.opt.pose_model_type == "shared":
                 pose_feats = {f_i: features[f_i] for f_i in self.opt.frame_ids}
             else:
@@ -322,7 +352,7 @@ class Trainer:
 
             for f_i in self.opt.frame_ids[1:]:
                 if f_i != "s":
-                    # To maintain ordering we always pass frames in temporal order
+                    # 为了保持顺序，总是按时间顺序传递帧
                     if f_i < 0:
                         pose_inputs = [pose_feats[f_i], pose_feats[0]]
                     else:
@@ -333,16 +363,16 @@ class Trainer:
                     elif self.opt.pose_model_type == "posecnn":
                         pose_inputs = torch.cat(pose_inputs, 1)
 
+                    # 通过pose解码器得到输出的 轴角 和 平移
                     axisangle, translation = self.models["pose"](pose_inputs)
                     outputs[("axisangle", 0, f_i)] = axisangle
                     outputs[("translation", 0, f_i)] = translation
 
-                    # Invert the matrix if the frame id is negative
+                    # 如果帧 id 为负，则反转矩阵
                     outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
                         axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
 
-        else:
-            # Here we input all frames to the pose net (and predict all poses) together
+        else:   # 将所有帧一起输入到姿态网络（并预测所有姿态）
             if self.opt.pose_model_type in ["separate_resnet", "posecnn"]:
                 pose_inputs = torch.cat(
                     [inputs[("color_aug", i, 0)] for i in self.opt.frame_ids if i != "s"], 1)
@@ -386,22 +416,31 @@ class Trainer:
         self.set_train()
 
     def generate_images_pred(self, inputs, outputs):
-        """Generate the warped (reprojected) color images for a minibatch.
-        Generated images are saved into the `outputs` dictionary.
         """
+        为小批量生成扭曲（重新投影）的彩色图像。
+        生成的图像被保存到 `outputs` 字典中。
+        """
+        # outputs["disp"]直接输出的就是视差图，并且仍然多尺度[0,1,2,3]分布。
         for scale in self.opt.scales:
             disp = outputs[("disp", scale)]
             if self.opt.v1_multiscale:
                 source_scale = scale
             else:
+                # ------------------------------------------------------------------------------------------------------
+                # 语法：torch.nn.functional.interpolate(input, size=None, scale_factor=None, mode='nearest',
+                #                                       align_corners=None, recompute_scale_factor=None)
+                # 详解参考： https://blog.csdn.net/qq_50001789/article/details/120297401
+                # ------------------------------------------------------------------------------------------------------
                 disp = F.interpolate(
                     disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
                 source_scale = 0
 
+            # 将disp值映射到[0.01,10]，并求倒数就能得到深度值
             _, depth = disp_to_depth(disp, self.opt.min_depth, self.opt.max_depth)
-
+            # 将深度值存放到outputs["depth"...]中
             outputs[("depth", 0, scale)] = depth
 
+            # 在stereo 训练时， frame_id恒为"s"。
             for i, frame_id in enumerate(self.opt.frame_ids[1:]):
 
                 if frame_id == "s":
@@ -420,18 +459,23 @@ class Trainer:
 
                     T = transformation_from_parameters(
                         axisangle[:, 0], translation[:, 0] * mean_inv_depth[:, 0], frame_id < 0)
-
+                # 将深度图投影成3维点云
                 cam_points = self.backproject_depth[source_scale](
                     depth, inputs[("inv_K", source_scale)])
+                # 将3维点云投影成二维图像
                 pix_coords = self.project_3d[source_scale](
                     cam_points, inputs[("K", source_scale)], T)
-
+                # 将二维图像赋值给outputs[("sample"..)]
                 outputs[("sample", frame_id, scale)] = pix_coords
 
+                # outputs上某点(x,y)的三个通道像素值来自于inputs上的(x',y'); 而x'和y'则由outputs(x,y)的最低维[0]和[1].
+                # grid_sample(input, grid, mode = "bilinear", padding_mode = "zeros", align_corners = None)：
+                #           提供一个input以及一个网格，然后根据grid中每个位置提供的坐标信息(input中pixel的坐标)，
+                #           将input中对应位置的像素值填充到grid指定的位置，得到最终的输出。
                 outputs[("color", frame_id, scale)] = F.grid_sample(
                     inputs[("color", frame_id, source_scale)],
                     outputs[("sample", frame_id, scale)],
-                    padding_mode="border")
+                    padding_mode="border")  # padding_mode="border": 对于越界的位置在⽹格中采⽤边界的pixel value进⾏填充。
 
                 if not self.opt.disable_automasking:
                     outputs[("color_identity", frame_id, scale)] = \
@@ -452,11 +496,13 @@ class Trainer:
         return reprojection_loss
 
     def compute_losses(self, inputs, outputs):
-        """Compute the reprojection and smoothness losses for a minibatch
+        """
+        计算小批量的重投影和平滑损失
         """
         losses = {}
         total_loss = 0
 
+        # 按尺度来计算loss
         for scale in self.opt.scales:
             loss = 0
             reprojection_losses = []
@@ -466,16 +512,20 @@ class Trainer:
             else:
                 source_scale = 0
 
-            disp = outputs[("disp", scale)]
-            color = inputs[("color", 0, scale)]
-            target = inputs[("color", 0, source_scale)]
+            disp = outputs[("disp", scale)]                 # 按尺度获得视差图
+            color = inputs[("color", 0, scale)]             # 按尺度获得原始输入图
+            target = inputs[("color", 0, source_scale)]     # 0 尺度的原始输入图
 
+            # 在stereo训练时，frame_id恒为“s”
             for frame_id in self.opt.frame_ids[1:]:
+                # 按尺度获得对应图像的预测图（即深度图转换到点云再转到二维图像最后采样得到的彩图
                 pred = outputs[("color", frame_id, scale)]
+                # 根据pred多尺度图和0尺度
                 reprojection_losses.append(self.compute_reprojection_loss(pred, target))
 
             reprojection_losses = torch.cat(reprojection_losses, 1)
 
+            # 直接对inputs["color",0,0]和["color",s,0]计算identity loss
             if not self.opt.disable_automasking:
                 identity_reprojection_losses = []
                 for frame_id in self.opt.frame_ids[1:]:
@@ -619,33 +669,39 @@ class Trainer:
                         outputs["identity_selection/{}".format(s)][j][None, ...], self.step)
 
     def save_opts(self):
-        """Save options to disk so we know what we ran this experiment with
+        """
+        将option的所有参数保存，便于后续复现
         """
         models_dir = os.path.join(self.log_path, "models")
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
+        # 拷贝 opt字典
         to_save = self.opt.__dict__.copy()
 
         with open(os.path.join(models_dir, 'opt.json'), 'w') as f:
+            # json.dumps()将一个Python数据结构转换为JSON; indent: 参数根据数据格式缩进显示，读起来更加清晰。
             json.dump(to_save, f, indent=2)
 
     def save_model(self):
-        """Save model weights to disk
+        """
+        保存模型权重参数，不是在原有的基础上更新，而是重新保存一个新的权重参数文件
         """
         save_folder = os.path.join(self.log_path, "models", "weights_{}".format(self.epoch))
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
 
+        # 保存模型参数
         for model_name, model in self.models.items():
             save_path = os.path.join(save_folder, "{}.pth".format(model_name))
             to_save = model.state_dict()
             if model_name == 'encoder':
-                # save the sizes - these are needed at prediction time
+                # 保存尺寸 - 在预测时需要这些尺寸
                 to_save['height'] = self.opt.height
                 to_save['width'] = self.opt.width
                 to_save['use_stereo'] = self.opt.use_stereo
             torch.save(to_save, save_path)
 
+        # 保存优化器参数
         save_path = os.path.join(save_folder, "{}.pth".format("adam"))
         torch.save(self.model_optimizer.state_dict(), save_path)
 

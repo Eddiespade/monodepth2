@@ -105,7 +105,7 @@ class ResnetEncoder(nn.Module):
 
     def forward(self, input_image):
         self.features = []
-        x = (input_image - 0.45) / 0.225    # 归一化 输入图像
+        x = (input_image - 0.45) / 0.225    # 归一化 输入图像; mean和var的值沒有很重要，重要的是必须做这个动作，因为network对(-1, 1)的input会比较好训练。
         x = self.encoder.conv1(x)
         x = self.encoder.bn1(x)
         self.features.append(self.encoder.relu(x))
