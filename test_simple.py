@@ -185,13 +185,20 @@ def test_simple(args):
             vmax = np.percentile(disp_resized_np, 95)    # 找到该视差图的95分位数
             # 一个类，当被调用时，它将数据线性地标准化为 [0.0, 1.0] 间隔。
             normalizer = mpl.colors.Normalize(vmin=disp_resized_np.min(), vmax=vmax)
+            # ----------------------------------------------------------------------------------------------------------
+            # 语法：cm.ScalarMappable(norm=None, cmap=None)
             # 将标量数据映射到 RGBA 的 mixin 类；ScalarMappable 在从给定颜色图中返回 RGBA 颜色之前应用数据规范化[0,1]
+            # 参数
+            #   norm : `matplotlib.colors.Normalize`（或其子类）缩放数据的规范化对象，通常进入区间“[0, 1]”。
+            #      如果 *None*，*norm* 默认为 *colors.Normalize* 对象，该对象根据处理的第一个数据初始化其缩放。
+            #   cmap : str 或 `~matplotlib.colors.Colormap` 用于将标准化数据值映射到 RGBA 颜色的颜色图。
+            # ----------------------------------------------------------------------------------------------------------
             mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')
             colormapped_im = (mapper.to_rgba(disp_resized_np)[:, :, :3] * 255).astype(np.uint8)
             im = pil.fromarray(colormapped_im)
 
             name_dest_im = os.path.join(output_directory, "{}_disp.jpeg".format(output_name))
-            im.save(name_dest_im)
+            im.save(name_dest_im)       # 保存视差图
 
             print("   Processed {:d} of {:d} images - saved predictions to:".format(
                 idx + 1, len(paths)))
