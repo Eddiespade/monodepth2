@@ -1,8 +1,3 @@
-# Copyright Niantic 2019. Patent Pending. All rights reserved.
-#
-# This software is licensed under the terms of the Monodepth2 licence
-# which allows for non-commercial use only, the full terms of which are made
-# available in the LICENSE file.
 
 from __future__ import absolute_import, division, print_function
 import os
@@ -22,17 +17,18 @@ def readlines(filename):
 
 
 def normalize_image(x):
-    """Rescale image pixels to span range [0, 1]
     """
-    ma = float(x.max().cpu().data)
-    mi = float(x.min().cpu().data)
-    d = ma - mi if ma != mi else 1e5
+    归一化：调整图像像素的大小 到 [0, 1]范围
+    """
+    ma = float(x.max().cpu().data)      # 获取 x 的最大值
+    mi = float(x.min().cpu().data)      # 获取 x 的最小值
+    d = ma - mi if ma != mi else 1e5    # 防止除数为 0
     return (x - mi) / d
 
 
 def sec_to_hm(t):
-    """Convert time in seconds to time in hours, minutes and seconds
-    e.g. 10239 -> (2, 50, 39)
+    """
+    以秒为单位的时间转换为以小时、分钟和秒为单位的时间；例如 10239 -> (2, 50, 39)
     """
     t = int(t)
     s = t % 60
@@ -43,15 +39,16 @@ def sec_to_hm(t):
 
 
 def sec_to_hm_str(t):
-    """Convert time in seconds to a nice string
-    e.g. 10239 -> '02h50m39s'
+    """
+    以秒为单位将时间转换为字符串形式；例如 10239 -> '02h50m39s'
     """
     h, m, s = sec_to_hm(t)
     return "{:02d}h{:02d}m{:02d}s".format(h, m, s)
 
 
 def download_model_if_doesnt_exist(model_name):
-    """If pretrained kitti model doesn't exist, download and unzip it
+    """
+    如果预训练的 kitti 模型不存在，下载并解压
     """
     # values are tuples of (<google cloud URL>, <md5 checksum>)
     download_paths = {
@@ -84,11 +81,13 @@ def download_model_if_doesnt_exist(model_name):
              "cdc5fc9b23513c07d5b19235d9ef08f7"),
         }
 
+    # 这里限制了模型的权重目录只能在本项目的 models 下
     if not os.path.exists("models"):
         os.makedirs("models")
 
     model_path = os.path.join("models", model_name)
 
+    # 检查md5
     def check_file_matches_md5(checksum, fpath):
         if not os.path.exists(fpath):
             return False
@@ -96,21 +95,35 @@ def download_model_if_doesnt_exist(model_name):
             current_md5checksum = hashlib.md5(f.read()).hexdigest()
         return current_md5checksum == checksum
 
-    # see if we have the model already downloaded...
+    # 检查是否已经下载了模型；如果不存在，则按给定的地址下载到本地
     if not os.path.exists(os.path.join(model_path, "encoder.pth")):
 
+        # model_url：保存的下载url路径；    required_md5checksum：MD5校验
         model_url, required_md5checksum = download_paths[model_name]
 
         if not check_file_matches_md5(required_md5checksum, model_path + ".zip"):
             print("-> Downloading pretrained model to {}".format(model_path + ".zip"))
+            # -----------------------------------------------------------------------------------
+            # 语法： urllib.request.urlretrieve(url, filename=None, reporthook=None, data=None)
+            # 用途： 将URL表示的网络对象复制到本地文件。
+            # url：          外部或者本地url
+            # filename：     指定了保存到本地的路径（如果未指定该参数，urllib会生成一个临时文件来保存数据）；
+            # reporthook：   是一个回调函数，当连接上服务器、以及相应的数据块传输完毕的时候会触发该回调。
+            #               我们可以利用这个回调函数来显示当前的下载进度。
+            # data：         指post到服务器的数据。该方法返回一个包含两个元素的元组(filename, headers)，
+            #               filename表示保存到本地的路径，header表示服务器的响应头。
+            # -------------------------------------------------------------------------------------------------
             urllib.request.urlretrieve(model_url, model_path + ".zip")
 
+        # 再次检查一遍（上述已经下载了）；如果下载错误，则退出
         if not check_file_matches_md5(required_md5checksum, model_path + ".zip"):
             print("   Failed to download a file which matches the checksum - quitting")
             quit()
 
+        # 下载正确则解压缩
         print("   Unzipping model...")
         with zipfile.ZipFile(model_path + ".zip", 'r') as f:
+            # ZipFile对象的extractall(file_path): 解压ZIP文件，压缩包中的文件都放到 file_path 目录中。
             f.extractall(model_path)
 
         print("   Model unzipped to {}".format(model_path))

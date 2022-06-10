@@ -1,9 +1,3 @@
-# Copyright Niantic 2019. Patent Pending. All rights reserved.
-#
-# This software is licensed under the terms of the Monodepth2 licence
-# which allows for non-commercial use only, the full terms of which are made
-# available in the LICENSE file.
-
 from __future__ import absolute_import, division, print_function
 
 import numpy as np
@@ -284,6 +278,7 @@ class Trainer:
             # 更新参数
             self.model_optimizer.step()
 
+            # 当前batch所经历的时间
             duration = time.time() - before_op_time
 
             # 在 2000 步后减少日志记录以节省时间和磁盘空间
@@ -291,12 +286,16 @@ class Trainer:
             late_phase = self.step % 2000 == 0      # 2000的倍数
 
             if early_phase or late_phase:
+                # 在控制台打印相关日志
                 self.log_time(batch_idx, duration, losses["loss"].cpu().data)
 
+                # 如果输入数据中存在 真实的深度信息 则计算深度损失
                 if "depth_gt" in inputs:
                     self.compute_depth_losses(inputs, outputs, losses)
 
+                # 将本次训练的结果保存到tensorboard内
                 self.log("train", inputs, outputs, losses)
+                # 开始本次验证
                 self.val()
 
             self.step += 1
@@ -330,9 +329,15 @@ class Trainer:
             outputs["predictive_mask"] = self.models["predictive_mask"](features)
 
         if self.use_pose_net:
+            # a.update(b)：
+            # 用 update 更新字典 a，会有两种情况：
+            # （1）有相同的键时：    会使用最新的字典 b 中 该 key 对应的 value 值。
+            # （2）有新的键时：      会直接把字典 b 中的 key、value 加入到 a 中。
             outputs.update(self.predict_poses(inputs, features))
 
+        # 为小批量生成扭曲（重新投影）的彩色图像
         self.generate_images_pred(inputs, outputs)
+        # 计算损失
         losses = self.compute_losses(inputs, outputs)
 
         return outputs, losses
@@ -395,16 +400,17 @@ class Trainer:
         return outputs
 
     def val(self):
-        """Validate the model on a single minibatch
         """
-        self.set_eval()
-        try:
+        在单个小批量上验证模型
+        """
+        self.set_eval()                         # 将网络设置为验证模式
+        try:                                    # 尝试去获取验证集
             inputs = self.val_iter.next()
-        except StopIteration:
+        except StopIteration:                   # 如果获取完了再从头获取
             self.val_iter = iter(self.val_loader)
             inputs = self.val_iter.next()
 
-        with torch.no_grad():
+        with torch.no_grad():                   # 设置参数不更新
             outputs, losses = self.process_batch(inputs)
 
             if "depth_gt" in inputs:
@@ -413,7 +419,7 @@ class Trainer:
             self.log("val", inputs, outputs, losses)
             del inputs, outputs, losses
 
-        self.set_train()
+        self.set_train()                        # 将网络设置为训练模式
 
     def generate_images_pred(self, inputs, outputs):
         """
@@ -482,11 +488,15 @@ class Trainer:
                         inputs[("color", frame_id, source_scale)]
 
     def compute_reprojection_loss(self, pred, target):
-        """Computes reprojection loss between a batch of predicted and target images
         """
-        abs_diff = torch.abs(target - pred)
-        l1_loss = abs_diff.mean(1, True)
+        计算一批预测图像和目标图像之间的重投影损失
+        pred    :   预测图像
+        target  :   目标图像
+        """
+        abs_diff = torch.abs(target - pred)     # 预测图像和目标图像之间的绝对误差，即 l1 距离
+        l1_loss = abs_diff.mean(1, True)        # 在dim=1维度取均值，并保持维度不变
 
+        # 如果不采用ssim计算重投影损失，则采用l1损失计算；默认为False，即采用ssim损失
         if self.opt.no_ssim:
             reprojection_loss = l1_loss
         else:
@@ -502,11 +512,12 @@ class Trainer:
         losses = {}
         total_loss = 0
 
-        # 按尺度来计算loss
+        # 按不同尺度来分别计算loss
         for scale in self.opt.scales:
             loss = 0
             reprojection_losses = []
 
+            # 如果使用v1的多尺度，则color 与 target相同; 默认为False
             if self.opt.v1_multiscale:
                 source_scale = scale
             else:
@@ -518,14 +529,15 @@ class Trainer:
 
             # 在stereo训练时，frame_id恒为“s”
             for frame_id in self.opt.frame_ids[1:]:
-                # 按尺度获得对应图像的预测图（即深度图转换到点云再转到二维图像最后采样得到的彩图
+                # 按尺度获得对应图像的预测图，即深度图转换到点云再转到二维图像最后采样得到的彩图
                 pred = outputs[("color", frame_id, scale)]
                 # 根据pred多尺度图和0尺度
                 reprojection_losses.append(self.compute_reprojection_loss(pred, target))
 
+            # 将 -1，1帧 或者 “s” 的重投影损失 在 dim=1 维度上进行拼接
             reprojection_losses = torch.cat(reprojection_losses, 1)
 
-            # 直接对inputs["color",0,0]和["color",s,0]计算identity loss
+            # 直接对inputs["color",0,0]和["color",s/-1/1,0]计算identity loss （恒等重投影损失）
             if not self.opt.disable_automasking:
                 identity_reprojection_losses = []
                 for frame_id in self.opt.frame_ids[1:]:
@@ -535,23 +547,23 @@ class Trainer:
 
                 identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
 
-                if self.opt.avg_reprojection:
+                if self.opt.avg_reprojection:   # 平均重投影损失
                     identity_reprojection_loss = identity_reprojection_losses.mean(1, keepdim=True)
-                else:
-                    # save both images, and do min all at once below
+                else:   # 保存两个图像，并在下面一次执行 min
                     identity_reprojection_loss = identity_reprojection_losses
 
+            # 使用（zhou等的）预测掩码
             elif self.opt.predictive_mask:
-                # use the predicted mask
                 mask = outputs["predictive_mask"]["disp", scale]
                 if not self.opt.v1_multiscale:
+                    # 对mask进行 双线性内插法将 mask 采样到 [self.opt.height, self.opt.width] <--> [192, 640]
                     mask = F.interpolate(
                         mask, [self.opt.height, self.opt.width],
                         mode="bilinear", align_corners=False)
 
                 reprojection_losses *= mask
 
-                # add a loss pushing mask to 1 (using nn.BCELoss for stability)
+                # mask <---> 1 之间的损失（使用 nn.BCELoss 来保持稳定性）
                 weighting_loss = 0.2 * nn.BCELoss()(mask, torch.ones(mask.shape).cuda())
                 loss += weighting_loss.mean()
 
@@ -561,7 +573,7 @@ class Trainer:
                 reprojection_loss = reprojection_losses
 
             if not self.opt.disable_automasking:
-                # add random numbers to break ties
+                # 添加随机数来打破联系
                 identity_reprojection_loss += torch.randn(
                     identity_reprojection_loss.shape, device=self.device) * 0.00001
 
@@ -572,6 +584,14 @@ class Trainer:
             if combined.shape[1] == 1:
                 to_optimise = combined
             else:
+                # ------------------------------------------------------------------------------------------------------
+                # 语法：torch.min(input, dim, keepdim=False, out=None) -> (Tensor, LongTensor)
+                # 输入：
+                #     input ：表示输入的张量
+                #     dim   ：表示的是索引的维度，0和1分别表示列和行
+                # 输出：
+                #     返回两个tensor，第一个tensor表示对应维度的最小值；第二个tensor表示最小值的索引
+                # ------------------------------------------------------------------------------------------------------
                 to_optimise, idxs = torch.min(combined, dim=1)
 
             if not self.opt.disable_automasking:
@@ -580,10 +600,11 @@ class Trainer:
 
             loss += to_optimise.mean()
 
-            mean_disp = disp.mean(2, True).mean(3, True)
-            norm_disp = disp / (mean_disp + 1e-7)
-            smooth_loss = get_smooth_loss(norm_disp, color)
+            mean_disp = disp.mean(2, True).mean(3, True)        # 获取disp空间上的均值
+            norm_disp = disp / (mean_disp + 1e-7)               # 归一化 disp
+            smooth_loss = get_smooth_loss(norm_disp, color)     # 计算视差图像的平滑度损失
 
+            # self.opt.disparity_smoothness： 视差平滑损失权重
             loss += self.opt.disparity_smoothness * smooth_loss / (2 ** scale)
             total_loss += loss
             losses["loss/{}".format(scale)] = loss
@@ -593,12 +614,13 @@ class Trainer:
         return losses
 
     def compute_depth_losses(self, inputs, outputs, losses):
-        """Compute depth metrics, to allow monitoring during training
-
-        This isn't particularly accurate as it averages over the entire batch,
-        so is only used to give an indication of validation performance
+        """
+        计算深度损失，以便在训练期间进行监督
+        这并不是特别准确，因为它是整个批次的平均值，因此仅用于指示验证性能
         """
         depth_pred = outputs[("depth", 0, 0)]
+        # torch.clamp(input, min, max, out=None) → Tensor
+        # 作用：将输入input张量每个元素的夹紧到区间 [min,max][min,max]，并返回结果到一个新张量。
         depth_pred = torch.clamp(F.interpolate(
             depth_pred, [375, 1242], mode="bilinear", align_corners=False), 1e-3, 80)
         depth_pred = depth_pred.detach()
@@ -609,24 +631,41 @@ class Trainer:
         # garg/eigen crop
         crop_mask = torch.zeros_like(mask)
         crop_mask[:, :, 153:371, 44:1197] = 1
+        # 掩码中的掩码
         mask = mask * crop_mask
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]
+        # --------------------------------------------------------------------------------------------------------------
+        # 语法：torch.median(input, dim=-1, values=None, indices=None) -> (Tensor, LongTensor):
+        # 作用：返回输入张量给定维度每行的中位数，同时返回一个包含中位数的索引。dim默认为输入张量的最后一维
+        #     input(Tensor) ：输入张量
+        #     dim(int)      ：缩减的维度
+        #     values(Tensor, optional)  ： 结果张量
+        #     indices(Tensor, optional) ： 返回的索引结果张量
         depth_pred *= torch.median(depth_gt) / torch.median(depth_pred)
 
         depth_pred = torch.clamp(depth_pred, min=1e-3, max=80)
 
+        # 计算真实深度标签和预测的深度图之间的误差，返回一个元组 包括：abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
         depth_errors = compute_depth_errors(depth_gt, depth_pred)
 
+        # 统一保存到losses中
         for i, metric in enumerate(self.depth_metric_names):
             losses[metric] = np.array(depth_errors[i].cpu())
 
     def log_time(self, batch_idx, duration, loss):
-        """Print a logging statement to the terminal
         """
+        将日志记录语句打印到终端
+        batch_idx：  当前batch的一个索引值
+        duration：   当前batch所经历的时间
+        loss：       损失值
+        """
+        # samples_per_sec：每秒的样本数
         samples_per_sec = self.opt.batch_size / duration
+        # 从开始训练到现在所用的 总时间
         time_sofar = time.time() - self.start_time
+        # 剩余的训练时间
         training_time_left = (
             self.num_total_steps / self.step - 1.0) * time_sofar if self.step > 0 else 0
         print_string = "epoch {:>3} | batch {:>6} | examples/s: {:5.1f}" + \
@@ -635,27 +674,54 @@ class Trainer:
                                   sec_to_hm_str(time_sofar), sec_to_hm_str(training_time_left)))
 
     def log(self, mode, inputs, outputs, losses):
-        """Write an event to the tensorboard events file
+        """
+        将 训练结果/测试结果 写入到tensorboard事件文件中
+        mode    :   当前事件的模式，可选：train、val
+        inputs  :   输入
+        outputs ：  模型的预测输出
+        losses  ：  各部分损失值
         """
         writer = self.writers[mode]
         for l, v in losses.items():
+            # ----------------------------------------------------------------------------------------------
+            # writer.add_scalar(tag, scalar_value, global_step = None, walltime = None,
+            #                   display_name = "", summary_description = "")
+            # 功能：将一个标量添加到 summary
+            # 参数：
+            #     tag (string)                              ：数据标识符
+            #     scalar_value (float or string/blobname)   ：要保存的数值
+            #     global_step (int)                         ：全局步值
+            #     walltime (float)                          ：可选参数，用于记录发生的时间，默认为 time.time()
+            # ----------------------------------------------------------------------------------------------
             writer.add_scalar("{}".format(l), v, self.step)
 
-        for j in range(min(4, self.opt.batch_size)):  # write a maxmimum of four images
+        for j in range(min(4, self.opt.batch_size)):  # 最多写入四张图片
             for s in self.opt.scales:
                 for frame_id in self.opt.frame_ids:
+                    # ----------------------------------------------------------------------------------------------
+                    # writer.add_image(tag, img_tensor, global_step = None, walltime = None, dataformats = 'CHW')
+                    # 功能：将一个图片添加到 summary；
+                    # 参数：
+                    #     tag (string)                              ：数据标识符
+                    #     img_tensor (float or string/blobname)     ：要保存的图片，其格式必须是（C，H，W）
+                    #     global_step (int)                         ：全局步值
+                    #     walltime (float)                          ：可选参数，用于记录发生的时间，默认为 time.time()
+                    # ----------------------------------------------------------------------------------------------
                     writer.add_image(
-                        "color_{}_{}/{}".format(frame_id, s, j),
+                        "color_{}_{}/{}".format(frame_id, s, j),    # color_x_y/z: 表示 第x帧、第y尺度、第z张图片
                         inputs[("color", frame_id, s)][j].data, self.step)
+                    # 如果为原始的尺度且当前帧不是 0，则再重新添加一组
                     if s == 0 and frame_id != 0:
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),
                             outputs[("color", frame_id, s)][j].data, self.step)
 
+                # 在tensorboard中添加 输出的视差图；需要归一化视差图
                 writer.add_image(
                     "disp_{}/{}".format(s, j),
                     normalize_image(outputs[("disp", s)][j]), self.step)
 
+                # 如果使用 Zhou 等人的预测掩码方案，则添加其掩码图像；默认为 False
                 if self.opt.predictive_mask:
                     for f_idx, frame_id in enumerate(self.opt.frame_ids[1:]):
                         writer.add_image(
@@ -663,6 +729,7 @@ class Trainer:
                             outputs["predictive_mask"][("disp", s)][j, f_idx][None, ...],
                             self.step)
 
+                # 如果采用自动掩码技术，则保存自动掩码的图片
                 elif not self.opt.disable_automasking:
                     writer.add_image(
                         "automask_{}/{}".format(s, j),

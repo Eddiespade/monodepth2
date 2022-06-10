@@ -216,7 +216,6 @@ class BackprojectDepth(nn.Module):
 
 class Project3D(nn.Module):
     """
-    Layer which projects 3D points into a camera with intrinsics K and at position T
     将 3D 点投影到具有内联函数 K 和位置 T 的相机中的层
     """
     def __init__(self, batch_size, height, width, eps=1e-7):
@@ -242,14 +241,31 @@ class Project3D(nn.Module):
 
 
 def upsample(x):
-    """Upsample input tensor by a factor of 2
     """
+    将输入tensor上采样 2 倍
+    """
+    # --------------------------------------------------------------------------------------------------
+    # 语法：torch.nn.functional.interpolate(input, size=None, scale_factor=None, mode='nearest',
+    #                                      align_corners=None, recompute_scale_factor=None)
+    # input(Tensor) ：             需要进行采样处理的数组。
+    # size(int或序列)：             输出空间的大小
+    # scale_factor(float或序列)：   空间大小的乘数
+    # mode(str)：                  用于采样的算法。'nearest'| 'linear'| 'bilinear'| 'bicubic'| 'trilinear'
+    #       | 'area'。默认：'nearest'
+    # align_corners(bool)：        在几何上，我们将输入和输出的像素视为正方形而不是点。如果设置为True，则输入和输出张量
+    #       按其角像素的中心点对齐，保留角像素处的值。 如果设置为False，则输入和输出张量通过其角像素的角点对齐，并且插值使
+    #       用边缘值填充用于边界外值，使此操作在保持不变时独立于输入大小scale_factor。
+    # recompute_scale_facto(bool)：重新计算用于插值计算的 scale_factor。当scale_factor作为参数传递时，
+    #       它用于计算output_size。如果recompute_scale_factor的False或没有指定，传入的scale_factor将在插值计算中
+    #       使用。否则，将根据用于插值计算的输出和输入大小计算新的scale_factor（即，如果计算的output_size显式传入， 则
+    #       计算将相同 ）。注意当scale_factor 是浮点数，由于舍入和精度问题，重新计算的 scale_factor 可能与传入的不同。
+    # --------------------------------------------------------------------------------------------------
     return F.interpolate(x, scale_factor=2, mode="nearest")
 
 
 def get_smooth_loss(disp, img):
-    """Computes the smoothness loss for a disparity image
-    The color image is used for edge-aware smoothness
+    """
+    计算视差图像的平滑度损失；彩色图像用于边缘感知平滑度
     """
     grad_disp_x = torch.abs(disp[:, :, :, :-1] - disp[:, :, :, 1:])
     grad_disp_y = torch.abs(disp[:, :, :-1, :] - disp[:, :, 1:, :])
@@ -302,7 +318,8 @@ class SSIM(nn.Module):
 
 
 def compute_depth_errors(gt, pred):
-    """Computation of error metrics between predicted and ground truth depths
+    """
+    计算预测和真实标签深度之间的误差度量
     """
     thresh = torch.max((gt / pred), (pred / gt))
     a1 = (thresh < 1.25     ).float().mean()

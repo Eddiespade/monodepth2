@@ -24,7 +24,7 @@ class MonodepthOptions:
         self.parser.add_argument("--log_dir",
                                  type=str,
                                  help="log directory",
-                                 default=os.path.join(os.path.expanduser("~"), "tmp"))
+                                 default=os.path.join(file_dir, "runs"))
 
         # 训练选项。
         self.parser.add_argument("--model_name",    # 保存模型日志的文件夹的名称，如：mono_model， stereo_model 以及mono+stereo_model
