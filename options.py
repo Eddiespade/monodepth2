@@ -35,7 +35,7 @@ class MonodepthOptions:
                                  type=str,
                                  help="which training split to use",
                                  choices=["eigen_zhou", "eigen_full", "odom", "benchmark"],
-                                 default="eigen_zhou")
+                                 default="eigen_zhou_test")
         self.parser.add_argument("--num_layers",    # resnet层的数量
                                  type=int,
                                  help="number of resnet layers",
@@ -87,7 +87,7 @@ class MonodepthOptions:
         self.parser.add_argument("--batch_size",    # 批量大小
                                  type=int,
                                  help="batch size",
-                                 default=12)
+                                 default=2)
         self.parser.add_argument("--learning_rate", # 学习率
                                  type=float,
                                  help="learning rate",

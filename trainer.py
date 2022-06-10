@@ -266,7 +266,7 @@ class Trainer:
         """
         运行每个Epoch的训练和验证
         """
-        self.model_lr_scheduler.step()          # 更新学习率
+        # self.model_lr_scheduler.step()          # 更新学习率
 
         print("Training")
         self.set_train()                        # 将所有模型转换为训练模式
