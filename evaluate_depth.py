@@ -18,9 +18,9 @@ cv2.setNumThreads(0)  # This speeds up evaluation 5x on our unix systems (OpenCV
 
 splits_dir = os.path.join(os.path.dirname(__file__), "splits")
 
-# Models which were trained with stereo supervision were trained with a nominal
-# baseline of 0.1 units. The KITTI rig has a baseline of 54cm. Therefore,
-# to convert our stereo predictions to real-world scale we multiply our depths by 5.4.
+# 用立体监督训练的模型用名义训练
+# 0.1 个单位的基线。 KITTI 钻机的基线为 54 厘米。 所以，
+# 为了将我们的立体预测转换为真实世界的比例，我们将深度乘以 5.4。
 STEREO_SCALE_FACTOR = 5.4
 
 
