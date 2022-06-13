@@ -46,7 +46,8 @@ def compute_errors(gt, pred):
 
 
 def batch_post_process_disparity(l_disp, r_disp):
-    """Apply the disparity post-processing method as introduced in Monodepthv1
+    """
+    应用 Monodepthv1 中介绍的视差后处理方法
     """
     _, h, w = l_disp.shape
     m_disp = 0.5 * (l_disp + r_disp)
@@ -57,7 +58,8 @@ def batch_post_process_disparity(l_disp, r_disp):
 
 
 def evaluate(opt):
-    """Evaluates a pretrained model using a specified test set
+    """
+    使用指定的测试集评估预训练模型
     """
     MIN_DEPTH = 1e-3
     MAX_DEPTH = 80
@@ -74,6 +76,7 @@ def evaluate(opt):
 
         print("-> Loading weights from {}".format(opt.load_weights_folder))
 
+        # 测试数据集路径
         filenames = readlines(os.path.join(splits_dir, opt.eval_split, "test_files.txt"))
         encoder_path = os.path.join(opt.load_weights_folder, "encoder.pth")
         decoder_path = os.path.join(opt.load_weights_folder, "depth.pth")
@@ -98,6 +101,7 @@ def evaluate(opt):
         depth_decoder.cuda()
         depth_decoder.eval()
 
+        # 存储预测的视差图
         pred_disps = []
 
         print("-> Computing predictions with size {}x{}".format(
@@ -108,7 +112,7 @@ def evaluate(opt):
                 input_color = data[("color", 0, 0)].cuda()
 
                 if opt.post_process:
-                    # Post-processed results require each image to have two forward passes
+                    # 后处理结果要求每张图像有两次前向传递
                     input_color = torch.cat((input_color, torch.flip(input_color, [3])), 0)
 
                 output = depth_decoder(encoder(input_color))
@@ -116,16 +120,18 @@ def evaluate(opt):
                 pred_disp, _ = disp_to_depth(output[("disp", 0)], opt.min_depth, opt.max_depth)
                 pred_disp = pred_disp.cpu()[:, 0].numpy()
 
+                # 后处理
                 if opt.post_process:
                     N = pred_disp.shape[0] // 2
                     pred_disp = batch_post_process_disparity(pred_disp[:N], pred_disp[N:, :, ::-1])
 
                 pred_disps.append(pred_disp)
 
+        # np.concatenate 对array进行拼接的函数
         pred_disps = np.concatenate(pred_disps)
 
     else:
-        # Load predictions from file
+        # 如果存在.npy文件，则从文件加载预测
         print("-> Loading predictions from {}".format(opt.ext_disp_to_eval))
         pred_disps = np.load(opt.ext_disp_to_eval)
 
@@ -135,16 +141,19 @@ def evaluate(opt):
 
             pred_disps = pred_disps[eigen_to_benchmark_ids]
 
+    # 如果设置后，则保存预测的差异；
     if opt.save_pred_disps:
         output_path = os.path.join(
             opt.load_weights_folder, "disps_{}_split.npy".format(opt.eval_split))
         print("-> Saving predicted disparities to ", output_path)
         np.save(output_path, pred_disps)
 
+    # 如果设置，则不评估
     if opt.no_eval:
         print("-> Evaluation disabled. Done.")
         quit()
 
+    # KITTI benchmark没有可用的groud truth，因此不进行评估。
     elif opt.eval_split == 'benchmark':
         save_dir = os.path.join(opt.load_weights_folder, "benchmark_predictions")
         print("-> Saving out benchmark predictions to {}".format(save_dir))
@@ -154,6 +163,7 @@ def evaluate(opt):
         for idx in range(len(pred_disps)):
             disp_resized = cv2.resize(pred_disps[idx], (1216, 352))
             depth = STEREO_SCALE_FACTOR / disp_resized
+            # np.clip是一个截取函数，用于截取数组中小于或者大于某值的部分，并使得被截取部分等于固定值。
             depth = np.clip(depth, 0, 80)
             depth = np.uint16(depth * 256)
             save_path = os.path.join(save_dir, "{:010d}.png".format(idx))
@@ -162,11 +172,13 @@ def evaluate(opt):
         print("-> No ground truth is available for the KITTI benchmark, so not evaluating. Done.")
         quit()
 
+    # 加载真实深度信息
     gt_path = os.path.join(splits_dir, opt.eval_split, "gt_depths.npz")
     gt_depths = np.load(gt_path, fix_imports=True, encoding='latin1')["data"]
 
+    # ======================================= 开始评估 ===========================================
     print("-> Evaluating")
-
+    # 单目评估还是双目评估
     if opt.eval_stereo:
         print("   Stereo evaluation - "
               "disabling median scaling, scaling by {}".format(STEREO_SCALE_FACTOR))

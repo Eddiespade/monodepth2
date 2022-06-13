@@ -34,7 +34,7 @@ class MonodepthOptions:
         self.parser.add_argument("--split",         # 使用哪个训练分组
                                  type=str,
                                  help="which training split to use",
-                                 choices=["eigen_zhou", "eigen_full", "odom", "benchmark"],
+                                 choices=["eigen_zhou_test", "eigen_zhou", "eigen_full", "odom", "benchmark"],
                                  default="eigen_zhou_test")
         self.parser.add_argument("--num_layers",    # resnet层的数量
                                  type=int,
@@ -181,7 +181,7 @@ class MonodepthOptions:
                                  help="optional path to a .npy disparities file to evaluate")
         self.parser.add_argument("--eval_split",            # 在哪个拆分上运行评估
                                  type=str,
-                                 default="eigen",
+                                 default="eigen_zhou_test",
                                  choices=[
                                      "eigen", "eigen_benchmark", "benchmark", "odom_9", "odom_10"],
                                  help="which split to run eval on")

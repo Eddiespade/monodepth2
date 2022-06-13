@@ -18,7 +18,7 @@ from torchvision import transforms
 
 
 def pil_loader(path):
-    # open path as file to avoid ResourceWarning
+    # 将路径作为文件打开以避免 ResourceWarning
     # (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
         with Image.open(f) as img:

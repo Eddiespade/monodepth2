@@ -46,6 +46,7 @@ def export_gt_depths_kitti():
             calib_dir = os.path.join(opt.data_path, folder.split("/")[0])
             velo_filename = os.path.join(opt.data_path, folder,
                                          "velodyne_points/data", "{:010d}.bin".format(frame_id))
+            # 从 velodyne 数据生成深度图
             gt_depth = generate_depth_map(calib_dir, velo_filename, 2, True)
         elif opt.split == "eigen_benchmark":
             gt_depth_path = os.path.join(opt.data_path, folder, "proj_depth",
@@ -58,6 +59,7 @@ def export_gt_depths_kitti():
 
     print("Saving to {}".format(opt.split))
 
+    # 以压缩的.npz 格式将多个数组保存到一个文件中。
     np.savez_compressed(output_path, data=np.array(gt_depths))
 
 
