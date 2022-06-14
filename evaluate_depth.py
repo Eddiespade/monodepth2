@@ -12,6 +12,7 @@ from utils import readlines
 from options import MonodepthOptions
 import datasets
 import networks
+import PIL.Image as pil
 
 cv2.setNumThreads(0)  # This speeds up evaluation 5x on our unix systems (OpenCV 3.3.1)
 
@@ -69,6 +70,7 @@ def evaluate(opt):
     """
     MIN_DEPTH = 1e-3
     MAX_DEPTH = 80
+    my_idx = 0
 
     assert sum((opt.eval_mono, opt.eval_stereo)) == 1, \
         "Please choose mono or stereo evaluation by setting either --eval_mono or --eval_stereo"
@@ -214,7 +216,11 @@ def evaluate(opt):
 
         pred_disp = pred_disps[i]
         pred_disp = cv2.resize(pred_disp, (gt_width, gt_height))
+        # ----------------------------------- 添加保存图片 ----------------------------------------
+        pil.fromarray(pred_disp).convert('RGB').save("./assets/predict_disp/{}.png".format(my_idx))
         pred_depth = 1 / pred_disp
+        pil.fromarray(pred_depth).convert('RGB').save("./assets/predict_depth/{}.png".format(my_idx))
+        my_idx += 1
 
         if opt.eval_split == "eigen":
             # np.logical_and(): 数组的矩阵的逻辑操作-与
@@ -265,7 +271,7 @@ def evaluate(opt):
 
 if __name__ == "__main__":
     options = MonodepthOptions().parse()
-    options.load_weights_folder = "~/dxl/test-dl/monodepth2/models/mono_640x192"
+    options.load_weights_folder = "~/dxl/test-dl/monodepth2/runs/mono_scratch_model/models/weights_19"
     options.eval_mono = True
     options.png = True
     evaluate(options)

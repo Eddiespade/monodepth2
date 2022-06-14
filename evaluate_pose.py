@@ -1,9 +1,3 @@
-# Copyright Niantic 2019. Patent Pending. All rights reserved.
-#
-# This software is licensed under the terms of the Monodepth2 licence
-# which allows for non-commercial use only, the full terms of which are made
-# available in the LICENSE file.
-
 from __future__ import absolute_import, division, print_function
 
 import os
@@ -19,7 +13,7 @@ from datasets import KITTIOdomDataset
 import networks
 
 
-# from https://github.com/tinghuiz/SfMLearner
+# 来自 https://github.com/tinghuiz/SfMLearner
 def dump_xyz(source_to_target_transformations):
     xyzs = []
     cam_to_world = np.eye(4)
@@ -30,16 +24,14 @@ def dump_xyz(source_to_target_transformations):
     return xyzs
 
 
-# from https://github.com/tinghuiz/SfMLearner
+# 来自 https://github.com/tinghuiz/SfMLearner
 def compute_ate(gtruth_xyz, pred_xyz_o):
 
-    # Make sure that the first matched frames align (no need for rotational alignment as
-    # all the predicted/ground-truth snippets have been converted to use the same coordinate
-    # system with the first frame of the snippet being the origin).
+    # 确保第一个匹配的帧对齐（不需要旋转对齐，因为所有预测/真实片段都已转换为使用相同的坐标系，片段的第一帧是原点）。
     offset = gtruth_xyz[0] - pred_xyz_o[0]
     pred_xyz = pred_xyz_o + offset[None, :]
 
-    # Optimize the scaling factor
+    # 优化缩放因子
     scale = np.sum(gtruth_xyz * pred_xyz) / np.sum(pred_xyz ** 2)
     alignment_error = pred_xyz * scale - gtruth_xyz
     rmse = np.sqrt(np.sum(alignment_error ** 2)) / gtruth_xyz.shape[0]
@@ -47,7 +39,8 @@ def compute_ate(gtruth_xyz, pred_xyz_o):
 
 
 def evaluate(opt):
-    """Evaluate odometry on the KITTI dataset
+    """
+    在 KITTI 数据集上评估里程计
     """
     assert os.path.isdir(opt.load_weights_folder), \
         "Cannot find a folder at {}".format(opt.load_weights_folder)
@@ -61,11 +54,13 @@ def evaluate(opt):
         os.path.join(os.path.dirname(__file__), "splits", "odom",
                      "test_files_{:02d}.txt".format(sequence_id)))
 
+    # --------------------------------- 加载 Odom 数据集 ------------------------------------
     dataset = KITTIOdomDataset(opt.data_path, filenames, opt.height, opt.width,
                                [0, 1], 4, is_train=False)
     dataloader = DataLoader(dataset, opt.batch_size, shuffle=False,
                             num_workers=opt.num_workers, pin_memory=True, drop_last=False)
 
+    # ------------------------------------ 加载模型权重 --------------------------------------
     pose_encoder_path = os.path.join(opt.load_weights_folder, "pose_encoder.pth")
     pose_decoder_path = os.path.join(opt.load_weights_folder, "pose.pth")
 
@@ -80,11 +75,10 @@ def evaluate(opt):
     pose_decoder.cuda()
     pose_decoder.eval()
 
+    # --------------------------------- 保存预测位姿并计算误差 --------------------------------------
     pred_poses = []
-
     print("-> Computing pose predictions")
-
-    opt.frame_ids = [0, 1]  # pose network only takes two frames as input
+    opt.frame_ids = [0, 1]  # pose网络只需要两帧作为输入
 
     with torch.no_grad():
         for inputs in dataloader:
@@ -113,6 +107,7 @@ def evaluate(opt):
         gt_local_poses.append(
             np.linalg.inv(np.dot(np.linalg.inv(gt_global_poses[i - 1]), gt_global_poses[i])))
 
+    # 保存误差
     ates = []
     num_frames = gt_xyzs.shape[0]
     track_length = 5

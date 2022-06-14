@@ -37,7 +37,7 @@ def export_gt_depths_kitti():
     lines = readlines(os.path.join(split_folder, "test_files.txt"))
 
     print("Exporting ground truth depths for {}".format(opt.split))
-
+    idx = 0
     gt_depths = []
     for line in lines:
 
@@ -50,6 +50,8 @@ def export_gt_depths_kitti():
                                          "velodyne_points/data", "{:010d}.bin".format(frame_id))
             # 从 velodyne 数据生成深度图
             gt_depth = generate_depth_map(calib_dir, velo_filename, 2, True)
+            pil.fromarray(gt_depth).convert('RGB').save("./assets/depth/{}.png".format(idx))
+            idx += 1
         elif opt.split == "eigen_benchmark":
             gt_depth_path = os.path.join(opt.data_path, folder, "proj_depth",
                                          "groundtruth", "image_02", "{:010d}.png".format(frame_id))

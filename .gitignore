@@ -3,6 +3,7 @@ __pycache__
 *_disp.jpg
 *_disp.npy
 *.npz
+*.png
 kitti_data
 models
 runs
