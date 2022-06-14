@@ -25,21 +25,27 @@ STEREO_SCALE_FACTOR = 5.4
 
 
 def compute_errors(gt, pred):
-    """Computation of error metrics between predicted and ground truth depths
     """
+    计算预测和真实深度之间的误差度量
+    """
+    # 阈值 始终大于1
     thresh = np.maximum((gt / pred), (pred / gt))
+    # ai 表示不同阈值下所占的比率
     a1 = (thresh < 1.25     ).mean()
     a2 = (thresh < 1.25 ** 2).mean()
     a3 = (thresh < 1.25 ** 3).mean()
 
+    # rmse：均方根误差
     rmse = (gt - pred) ** 2
     rmse = np.sqrt(rmse.mean())
 
+    # rmse_log: log后的均方根误差
     rmse_log = (np.log(gt) - np.log(pred)) ** 2
     rmse_log = np.sqrt(rmse_log.mean())
 
+    # abs_rel： 相对的绝对值误差 ( / 真实标签)
     abs_rel = np.mean(np.abs(gt - pred) / gt)
-
+    # sq_rel： 相对的平方误差 ( / 真实标签)
     sq_rel = np.mean(((gt - pred) ** 2) / gt)
 
     return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
@@ -187,8 +193,8 @@ def evaluate(opt):
     else:
         print("   Mono evaluation - using median scaling")
 
-    errors = []
-    ratios = []
+    errors = []     # 保存真实深度和预测深度的差距
+    ratios = []     # 保存真实深度/预测深度的比率
 
     for i in range(pred_disps.shape[0]):
 
@@ -200,36 +206,45 @@ def evaluate(opt):
         pred_depth = 1 / pred_disp
 
         if opt.eval_split == "eigen":
+            # np.logical_and(): 数组的矩阵的逻辑操作-与
             mask = np.logical_and(gt_depth > MIN_DEPTH, gt_depth < MAX_DEPTH)
 
             crop = np.array([0.40810811 * gt_height, 0.99189189 * gt_height,
                              0.03594771 * gt_width,  0.96405229 * gt_width]).astype(np.int32)
             crop_mask = np.zeros(mask.shape)
             crop_mask[crop[0]:crop[1], crop[2]:crop[3]] = 1
+            # mask 仅在 真实深度在最大和最小值之间 且 在规定的区间 才为1
             mask = np.logical_and(mask, crop_mask)
 
         else:
+            # 在此情况下，仅需真实深度有效 即 > 0时才 为 True
             mask = gt_depth > 0
 
         pred_depth = pred_depth[mask]
         gt_depth = gt_depth[mask]
 
         pred_depth *= opt.pred_depth_scale_factor
+        # 对预测深度进行中值缩放
         if not opt.disable_median_scaling:
             ratio = np.median(gt_depth) / np.median(pred_depth)
             ratios.append(ratio)
             pred_depth *= ratio
 
+        # 将预测的深度信息 限制在 [MIN_DEPTH, MAX_DEPTH]区间
         pred_depth[pred_depth < MIN_DEPTH] = MIN_DEPTH
         pred_depth[pred_depth > MAX_DEPTH] = MAX_DEPTH
 
+        # 计算损失并保存
         errors.append(compute_errors(gt_depth, pred_depth))
 
+    # 打印中指缩放的相关信息
     if not opt.disable_median_scaling:
         ratios = np.array(ratios)
+        # np.std()函数被用来：计算沿指定轴的标准差。
         med = np.median(ratios)
         print(" Scaling ratios | med: {:0.3f} | std: {:0.3f}".format(med, np.std(ratios / med)))
 
+    # 打印总体的每一项平均损失
     mean_errors = np.array(errors).mean(0)
 
     print("\n  " + ("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
