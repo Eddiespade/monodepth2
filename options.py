@@ -181,7 +181,7 @@ class MonodepthOptions:
                                  help="optional path to a .npy disparities file to evaluate")
         self.parser.add_argument("--eval_split",            # 在哪个拆分上运行评估
                                  type=str,
-                                 default="eigen_zhou_test",
+                                 default="eigen",
                                  choices=[
                                      "eigen", "eigen_benchmark", "benchmark", "odom_9", "odom_10"],
                                  help="which split to run eval on")

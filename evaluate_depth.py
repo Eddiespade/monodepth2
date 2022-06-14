@@ -180,7 +180,18 @@ def evaluate(opt):
 
     # 加载真实深度信息
     gt_path = os.path.join(splits_dir, opt.eval_split, "gt_depths.npz")
-    gt_depths = np.load(gt_path, fix_imports=True, encoding='latin1')["data"]
+    # -----------------------------------------------------------------------------------------------
+    # 用法：numpy.load(file, mmap_mode=None, allow_pickle=True, fix_imports=True,encoding=’ASCII’)
+    # 参数：
+    #     file ：file-like对象，字符串或pathlib.Path。要读取的文件。 File-like对象必须支持seek()和read()方法。
+    #     mmap_mode :如果不为None，则使用给定模式memory-map文件(有关详细信息，请参见numpy.memmap
+    #     模式说明)。
+    #     allow_pickle :允许加载存储在npy文件中的腌制对象数组。
+    #     fix_imports :仅在在Python 3上加载Python 2生成的腌制文件时有用，该文件包括包含对象数组的npy /npz文件。
+    #     encoding :仅当在Python 3中加载Python 2生成的腌制文件时有用，该文件包含包含对象数组的npy /npz文件。
+    #     Returns :数据存储在文件中。对于.npz文件，必须关闭NpzFile类的返回实例，以避免泄漏文件描述符。
+    # -----------------------------------------------------------------------------------------------
+    gt_depths = np.load(gt_path, fix_imports=True, encoding='latin1', allow_pickle=True)["data"]
 
     # ======================================= 开始评估 ===========================================
     print("-> Evaluating")
@@ -253,5 +264,8 @@ def evaluate(opt):
 
 
 if __name__ == "__main__":
-    options = MonodepthOptions()
-    evaluate(options.parse())
+    options = MonodepthOptions().parse()
+    options.load_weights_folder = "~/dxl/test-dl/monodepth2/models/mono_640x192"
+    options.eval_mono = True
+    options.png = True
+    evaluate(options)
