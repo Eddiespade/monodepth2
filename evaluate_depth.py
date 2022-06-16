@@ -271,7 +271,7 @@ def evaluate(opt):
 
 if __name__ == "__main__":
     options = MonodepthOptions().parse()
-    options.load_weights_folder = "~/dxl/test-dl/monodepth2/runs/mono_scratch_model/models/weights_19"
+    options.load_weights_folder = "~/dxl/test-dl/monodepth2/models/mono+stereo_640x192"
     options.eval_mono = True
     options.png = True
     evaluate(options)

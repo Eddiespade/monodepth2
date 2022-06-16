@@ -45,7 +45,7 @@ class Trainer:
         # frame_ids 必须以 0 开头; 即第一个必须为当前输入的样本图像
         assert self.opt.frame_ids[0] == 0, "frame_ids must start with 0"
 
-        # 仅使用 stereo训练的时候  self.use_pose_net = True
+        # 仅使用 stereo训练的时候： self.use_pose_net = False
         self.use_pose_net = not (self.opt.use_stereo and self.opt.frame_ids == [0])
 
         # 如果使用 含有stereo训练，帧数的id追加 "s"; "s"代表双目当前帧的另一侧的图片；
