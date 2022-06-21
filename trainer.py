@@ -39,7 +39,7 @@ class Trainer:
         self.num_scales = len(self.opt.scales)
         # 输入帧 个数
         self.num_input_frames = len(self.opt.frame_ids)
-        # 如果为 位姿模型得到的输入为 pairs 则 位姿帧 个数为 2
+        # 如果 位姿模型得到的输入为 pairs ： 位姿帧 个数为 2
         self.num_pose_frames = 2 if self.opt.pose_model_input == "pairs" else self.num_input_frames
 
         # frame_ids 必须以 0 开头; 即第一个必须为当前输入的样本图像
@@ -303,7 +303,7 @@ class Trainer:
     def process_batch(self, inputs):
         """
         通过网络传递一个小批量并生成图像和损失
-        网络的input最终是大小为42的字典，是通过CPU进行运算的。
+        网络的input最终是大小为(双目+单目：42)的字典，是通过CPU进行运算的。
         这里的42 = 4(输入的4张图) × 4(4个尺度) × 2(数据增强) + 4(K矩阵4个尺度) × 2(加上逆矩阵) + 2
         """
         for key, ipt in inputs.items():
