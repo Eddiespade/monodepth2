@@ -28,14 +28,14 @@ def pil_loader(path):
 class MonoDataset(data.Dataset):
     """
     单目数据加载器的父类
-        data_path   ：   数据集的路径
-        filenames   ：   文件名
+        data_path   ：   数据集的父路径
+        filenames   ：   txt 文件中的每一行
         height      ：   高度
         width       ：   宽度
-        frame_idxs  ：
-        num_scales  ：
-        is_train    ：
-        img_ext     ：
+        frame_idxs  ：   帧数
+        num_scales  ：   多尺度的数量
+        is_train    ：   是否是训练集
+        img_ext     ：   图片后缀
     """
     def __init__(self,
                  data_path,
