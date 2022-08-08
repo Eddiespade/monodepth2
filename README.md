@@ -1,5 +1,6 @@
 # Monodepth2
 （用于学习用途的Monodepth2个人注解版）
+[![OSCS Status](https://www.oscs1024.com/platform/badge/Eddiespade/monodepth2.svg?size=small)](https://www.oscs1024.com/project/Eddiespade/monodepth2?ref=badge_small)
 
 训练和测试深度估计模型的参考 PyTorch 实现
 
