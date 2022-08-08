@@ -115,6 +115,8 @@ def evaluate(opt):
         print("-> Computing predictions with size {}x{}".format(
             encoder_dict['width'], encoder_dict['height']))
 
+        import time
+        start = time.time()
         with torch.no_grad():
             for data in dataloader:
                 input_color = data[("color", 0, 0)].cuda()
@@ -134,6 +136,8 @@ def evaluate(opt):
                     pred_disp = batch_post_process_disparity(pred_disp[:N], pred_disp[N:, :, ::-1])
 
                 pred_disps.append(pred_disp)
+        end = time.time()
+        print("running time is ",  float(end - start) * 1000.0, "ms")
 
         # np.concatenate 对array进行拼接的函数
         pred_disps = np.concatenate(pred_disps)
@@ -271,7 +275,7 @@ def evaluate(opt):
 
 if __name__ == "__main__":
     options = MonodepthOptions().parse()
-    options.load_weights_folder = "~/dxl/test-dl/monodepth2/models/mono+stereo_640x192"
+    options.load_weights_folder = "~/dxl/test-dl/monodepth2/models/mono_640x192"
     options.eval_mono = True
     options.png = True
     evaluate(options)
