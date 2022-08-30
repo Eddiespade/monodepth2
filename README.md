@@ -41,6 +41,12 @@ year = {2019}
 conda install pytorch=0.4.1 torchvision=0.2.1 -c pytorch
 pip install tensorboardX==1.4
 conda install opencv=3.3.1   # 只需要评估
+
+# monodepth2的其它依赖库
+pip install Pillow
+pip install matplotlib
+pip install scikit-image
+
 ```
 
 我们使用 PyTorch 0.4.1、CUDA 9.1、Python 3.6.6 和 Ubuntu 18.04 进行了实验。
